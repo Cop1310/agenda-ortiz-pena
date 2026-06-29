@@ -125,41 +125,59 @@
     width: 100%;
   }
 
-  /* ===== Home / family chip strip ===== */
+  /* ===== Home / family circle strip ===== */
   .family-strip {
     display: flex;
-    gap: 8px;
-    padding: 14px 16px 4px;
+    gap: 10px;
+    padding: 16px 16px 6px;
     overflow-x: auto;
     background: var(--paper-warm);
     border-bottom: 2px solid var(--line);
+    justify-content: center;
   }
 
-  .person-chip {
+  .person-circle {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 2.5px solid var(--line);
+    background: white;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    cursor: pointer;
+    flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 7px 12px 7px 8px;
-    border-radius: 20px;
-    border: 2px solid transparent;
-    background: white;
+    justify-content: center;
+  }
+
+  .person-circle[data-person="todos"] { font-size: 0.68rem; }
+
+  .person-circle.active { color: var(--ink); }
+  .person-circle[data-person="todos"].active { border-color: var(--accent); background: #FDF0EA; color: var(--accent); }
+  .person-circle[data-person="cesar"].active { border-color: var(--cesar); background: var(--cesar-soft); color: var(--cesar); }
+  .person-circle[data-person="yoli"].active { border-color: var(--yoli); background: var(--yoli-soft); color: var(--yoli); }
+  .person-circle[data-person="gonzalo"].active { border-color: var(--gonzalo); background: var(--gonzalo-soft); color: var(--gonzalo); }
+  .person-circle[data-person="adrian"].active { border-color: var(--adrian); background: var(--adrian-soft); color: var(--adrian); }
+  .person-circle[data-person="familia"].active { border-color: var(--familia); background: var(--familia-soft); }
+
+  .notif-toggle-btn {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 10px;
+    background: var(--paper-warm);
+    border: none;
+    border-bottom: 2px solid var(--line);
     font-family: 'Helvetica Neue', Arial, sans-serif;
     font-size: 0.78rem;
     font-weight: 700;
     color: var(--ink-soft);
     cursor: pointer;
-    flex-shrink: 0;
-    white-space: nowrap;
   }
-
-  .person-chip .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-
-  .person-chip.active { color: var(--ink); }
-  .person-chip[data-person="cesar"].active { border-color: var(--cesar); background: var(--cesar-soft); }
-  .person-chip[data-person="yoli"].active { border-color: var(--yoli); background: var(--yoli-soft); }
-  .person-chip[data-person="gonzalo"].active { border-color: var(--gonzalo); background: var(--gonzalo-soft); }
-  .person-chip[data-person="adrian"].active { border-color: var(--adrian); background: var(--adrian-soft); }
-  .person-chip[data-person="familia"].active { border-color: var(--familia); background: var(--familia-soft); }
+  .notif-toggle-btn.notif-active { color: var(--gonzalo); }
 
   .dot.cesar { background: var(--cesar); }
   .dot.yoli { background: var(--yoli); }
@@ -343,6 +361,32 @@
     color: var(--ink);
     font-family: 'Iowan Old Style', Georgia, serif;
     font-size: 1rem;
+  }
+
+  .voice-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .voice-input-row .text-input { flex: 1; }
+
+  .mic-btn {
+    width: 48px;
+    flex-shrink: 0;
+    border: 1.5px solid var(--line);
+    background: white;
+    border-radius: 10px;
+    font-size: 1.2rem;
+    cursor: pointer;
+  }
+  .mic-btn.listening {
+    background: var(--accent);
+    border-color: var(--accent);
+    animation: pulse-mic 1s infinite;
+  }
+  @keyframes pulse-mic {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
   }
 
   .person-select-grid {
@@ -625,13 +669,15 @@
   </div>
 
   <div class="family-strip" id="familyStrip">
-    <button class="person-chip active" data-person="todos" onclick="toggleFilter('todos')"><span>Todos</span></button>
-    <button class="person-chip" data-person="cesar" onclick="toggleFilter('cesar')"><span class="dot cesar"></span><span>César</span></button>
-    <button class="person-chip" data-person="yoli" onclick="toggleFilter('yoli')"><span class="dot yoli"></span><span>Yoli</span></button>
-    <button class="person-chip" data-person="gonzalo" onclick="toggleFilter('gonzalo')"><span class="dot gonzalo"></span><span>Gonzalo</span></button>
-    <button class="person-chip" data-person="adrian" onclick="toggleFilter('adrian')"><span class="dot adrian"></span><span>Adrián</span></button>
-    <button class="person-chip" data-person="familia" onclick="toggleFilter('familia')"><span class="dot familia"></span><span>Familia</span></button>
+    <button class="person-circle active" data-person="todos" onclick="toggleFilter('todos')">Todos</button>
+    <button class="person-circle" data-person="cesar" onclick="toggleFilter('cesar')">C</button>
+    <button class="person-circle" data-person="yoli" onclick="toggleFilter('yoli')">Y</button>
+    <button class="person-circle" data-person="gonzalo" onclick="toggleFilter('gonzalo')">G</button>
+    <button class="person-circle" data-person="adrian" onclick="toggleFilter('adrian')">A</button>
+    <button class="person-circle" data-person="familia" onclick="toggleFilter('familia')">👪</button>
   </div>
+
+  <button class="notif-toggle-btn" id="notifToggleBtn" onclick="enableNotificationsClick()">🔕 Activar avisos en este móvil</button>
 
   <div class="content">
     <div class="calendar-nav">
@@ -663,8 +709,19 @@
   <div class="content">
 
     <div class="field-group">
-      <span class="field-label">¿Qué es?</span>
-      <input type="text" class="text-input" id="eventTitleInput" placeholder="Ej: Clase de inglés">
+      <span class="field-label">Evento</span>
+      <div class="voice-input-row">
+        <input type="text" class="text-input" id="eventTitleInput" placeholder="Ej: Clase de inglés">
+        <button type="button" class="mic-btn" id="micBtnTitle" onclick="startVoiceInput('eventTitleInput', this)">🎤</button>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <span class="field-label">Nota</span>
+      <div class="voice-input-row">
+        <input type="text" class="text-input" id="eventNoteInput" placeholder="Ej: Pagar 100€ de matrícula">
+        <button type="button" class="mic-btn" id="micBtnNote" onclick="startVoiceInput('eventNoteInput', this)">🎤</button>
+      </div>
     </div>
 
     <div class="field-group">

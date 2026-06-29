@@ -122,7 +122,7 @@ function toggleFilter(person) {
       activeFilters.add(person);
     }
   }
-  document.querySelectorAll('.person-chip').forEach(chip => {
+  document.querySelectorAll('.person-circle').forEach(chip => {
     chip.classList.toggle('active', activeFilters.has(chip.dataset.person));
   });
   renderCalendar();
@@ -247,12 +247,14 @@ function renderEventCard(ev) {
     : (ev.people || []).map(p => `<span class="ec-person-tag"><span class="mini-dot dot ${p}"></span>${PEOPLE_LABELS[p]}</span>`).join('');
 
   const timeLabel = ev.startTime ? `${ev.startTime}${ev.endTime ? ' - ' + ev.endTime : ''}` : '';
+  const noteHtml = ev.note ? `<div class="ec-title">${escapeHtmlAg(ev.note)}</div>` : '';
 
   return `
     <div class="event-card" style="border-left-color:${borderColor};" onclick="showEventDetail('${ev.id}')">
       <div class="ec-time">${timeLabel}</div>
       <div class="ec-body">
         <div class="ec-title">${escapeHtmlAg(ev.title)}</div>
+        ${noteHtml}
         <div class="ec-people">${peopleTags}</div>
       </div>
     </div>
@@ -277,9 +279,11 @@ function showEventDetail(id) {
 
   const dateObj = parseDateStr(ev.date);
   const dayLabel = `${WEEKDAY_LABELS[dateObj.getDay()]} ${dateObj.getDate()} de ${MONTH_LABELS[dateObj.getMonth()].toLowerCase()} de ${dateObj.getFullYear()}`;
+  const noteHtml = ev.note ? `<h3 style="margin-top:-6px;">${escapeHtmlAg(ev.note)}</h3>` : '';
 
   modal.innerHTML = `
     <h3>${escapeHtmlAg(ev.title)}</h3>
+    ${noteHtml}
     <p style="margin-bottom:10px; color:var(--ink-soft);">${dayLabel}</p>
     <p style="margin-bottom:14px; font-weight:700;">${ev.startTime || ''}${ev.endTime ? ' - ' + ev.endTime : ''}</p>
     <div class="ec-people" style="margin-bottom:18px;">${peopleTags}</div>
@@ -308,6 +312,7 @@ function goToAddEvent() {
   document.getElementById('eventFormTitle').textContent = 'Nuevo evento';
   document.getElementById('deleteEventBtn').style.display = 'none';
   document.getElementById('eventTitleInput').value = '';
+  document.getElementById('eventNoteInput').value = '';
   document.getElementById('singleDateInput').value = selectedDayStr;
   document.getElementById('eventStartTime').value = '';
   document.getElementById('eventEndTime').value = '';
@@ -323,6 +328,7 @@ function editEvent(id) {
   document.getElementById('eventFormTitle').textContent = 'Editar evento';
   document.getElementById('deleteEventBtn').style.display = 'block';
   document.getElementById('eventTitleInput').value = ev.title;
+  document.getElementById('eventNoteInput').value = ev.note || '';
   document.getElementById('eventStartTime').value = ev.startTime || '';
   document.getElementById('eventEndTime').value = ev.endTime || '';
   document.getElementById('singleDateInput').value = ev.date;
@@ -489,6 +495,39 @@ function updateWeeklyPreview() {
   if (el) el.addEventListener('change', updateWeeklyPreview);
 });
 
+/* ============== VOICE INPUT (dictado) ============== */
+function startVoiceInput(inputId, btnEl) {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showToast('⚠️ Este navegador no permite dictar por voz');
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
+  recognition.lang = 'es-ES';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  btnEl.classList.add('listening');
+
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    const input = document.getElementById(inputId);
+    // Append if there's already text, otherwise just set it
+    input.value = input.value ? (input.value + ' ' + transcript) : transcript;
+  };
+
+  recognition.onerror = () => {
+    showToast('⚠️ No se ha entendido, inténtalo otra vez');
+  };
+
+  recognition.onend = () => {
+    btnEl.classList.remove('listening');
+  };
+
+  recognition.start();
+}
+
 /* ============== SAVE EVENT ============== */
 async function saveEvent() {
   const title = document.getElementById('eventTitleInput').value.trim();
@@ -501,9 +540,11 @@ async function saveEvent() {
 
   const startTime = document.getElementById('eventStartTime').value;
   const endTime = document.getElementById('eventEndTime').value;
+  const note = document.getElementById('eventNoteInput').value.trim();
 
   const baseEvent = {
     title,
+    note,
     familia: formState.isFamilia,
     people: formState.isFamilia ? [] : Array.from(formState.selectedPeople),
     startTime, endTime,
@@ -561,12 +602,14 @@ function deleteCurrentEvent() {
 /* ====================================================================
    NOTIFICACIONES LOCALES
    La app revisa los eventos próximos mientras está abierta (o recién
-   en segundo plano) y dispara una notificación del navegador cuando
-   toca avisar. No requiere servidor propio, pero solo funciona si el
-   dispositivo no ha cerrado del todo la app.
+   en segundo plano) y dispara una notificación a través del Service
+   Worker, que es más fiable en móvil que las notificaciones directas.
+   Sigue necesitando que la app esté instalada y no completamente
+   cerrada por el sistema, pero es la opción más robusta sin servidor.
    ==================================================================== */
 
 const NOTIFIED_KEY = 'agenda_notified_ids';
+let swRegistration = null;
 
 function getNotifiedSet() {
   try {
@@ -577,9 +620,21 @@ function getNotifiedSet() {
 
 function saveNotifiedSet(set) {
   try {
-    const arr = Array.from(set).slice(-500); // keep it bounded
+    const arr = Array.from(set).slice(-500);
     localStorage.setItem(NOTIFIED_KEY, JSON.stringify(arr));
   } catch (e) { /* ignore */ }
+}
+
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return null;
+  try {
+    const reg = await navigator.serviceWorker.register('sw.js');
+    await navigator.serviceWorker.ready;
+    return reg;
+  } catch (e) {
+    console.error('Error registrando service worker', e);
+    return null;
+  }
 }
 
 async function requestNotificationPermission() {
@@ -588,6 +643,14 @@ async function requestNotificationPermission() {
   if (Notification.permission === 'denied') return false;
   const result = await Notification.requestPermission();
   return result === 'granted';
+}
+
+function fireNotification(title, options) {
+  if (swRegistration && swRegistration.showNotification) {
+    swRegistration.showNotification(title, options);
+  } else {
+    try { new Notification(title, options); } catch (e) { /* ignore */ }
+  }
 }
 
 function checkUpcomingEvents() {
@@ -607,31 +670,55 @@ function checkUpcomingEvents() {
 
     const notifyAt = new Date(eventDateTime.getTime() - ev.reminderMins * 60000);
 
-    // Fire if we're within a 90-second window after the notify time
-    // (checked every ~30s, so this window avoids missing the trigger)
     const diff = now - notifyAt;
     if (diff >= 0 && diff < 90000) {
       const who = ev.familia ? 'Familia' : (ev.people || []).map(p => PEOPLE_LABELS[p]).join(', ');
-      try {
-        new Notification('📅 ' + ev.title, {
-          body: `${who} — ${ev.startTime}${ev.endTime ? ' a ' + ev.endTime : ''}`,
-          icon: undefined,
-          tag: id
-        });
-      } catch (e) { /* ignore */ }
+      fireNotification('📅 ' + ev.title, {
+        body: `${who} — ${ev.startTime}${ev.endTime ? ' a ' + ev.endTime : ''}${ev.note ? '\n' + ev.note : ''}`,
+        tag: id
+      });
       notified.add(id);
       saveNotifiedSet(notified);
     }
   });
 }
 
-// Ask for permission once the user has interacted with the page
-document.addEventListener('click', async function initNotifPermissionOnce() {
-  await requestNotificationPermission();
-  document.removeEventListener('click', initNotifPermissionOnce);
-}, { once: true });
+async function setupNotifications() {
+  swRegistration = await registerServiceWorker();
+  updateNotifButtonState();
+}
+
+async function enableNotificationsClick() {
+  const granted = await requestNotificationPermission();
+  updateNotifButtonState();
+  if (granted) {
+    showToast('🔔 Avisos activados en este dispositivo');
+    checkUpcomingEvents();
+  } else if (Notification.permission === 'denied') {
+    showToast('⚠️ Bloqueado. Actívalo en los ajustes del navegador para este sitio');
+  } else {
+    showToast('⚠️ No se ha activado el permiso');
+  }
+}
+
+function updateNotifButtonState() {
+  const btn = document.getElementById('notifToggleBtn');
+  if (!btn) return;
+  if (!('Notification' in window)) {
+    btn.style.display = 'none';
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    btn.textContent = '🔔 Avisos activados';
+    btn.classList.add('notif-active');
+  } else {
+    btn.textContent = '🔕 Activar avisos en este móvil';
+    btn.classList.remove('notif-active');
+  }
+}
+
+setupNotifications();
 
 // Check every 30 seconds while the app is open/visible
 setInterval(checkUpcomingEvents, 30000);
-// Also check immediately once events are first loaded
 setTimeout(checkUpcomingEvents, 3000);
