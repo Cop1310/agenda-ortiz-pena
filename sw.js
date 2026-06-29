@@ -1,5 +1,6 @@
 // Service Worker mínimo para la Agenda Ortiz Peña
-// Solo se usa para poder mostrar notificaciones de forma más fiable en móvil.
+// Gestiona notificaciones y cumple los requisitos de "instalabilidad" de
+// Chrome para Android (que exige un listener de fetch registrado).
 
 self.addEventListener('install', () => {
   self.skipWaiting();
@@ -7,6 +8,12 @@ self.addEventListener('install', () => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
+});
+
+// Chrome Android requiere un listener de 'fetch' para considerar la PWA
+// instalable, aunque no necesitemos hacer caché real de nada.
+self.addEventListener('fetch', (event) => {
+  event.respondWith(fetch(event.request));
 });
 
 self.addEventListener('message', (event) => {
