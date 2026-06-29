@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Agenda Ortiz Peña</title>
+<link rel="manifest" href="data:application/json,{%22name%22:%22Agenda%20Ortiz%20Pe%C3%B1a%22,%22short_name%22:%22Agenda%22,%22display%22:%22standalone%22,%22background_color%22:%22%23FBF6EE%22,%22theme_color%22:%22%23E8714A%22}">
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+
+<style>
+  :root {
+    /* Paper & ink */
+    --paper: #FBF6EE;
+    --paper-warm: #F5EBDA;
+    --ink: #2E2A24;
+    --ink-soft: #6B6358;
+    --line: #DDD2BC;
+
+    /* Person colors — warm, distinct, kitchen-noticeboard palette */
+    --cesar: #3D6E8A;       /* steady blue */
+    --cesar-soft: #DCEAF0;
+    --yoli: #C6577A;        /* warm berry */
+    --yoli-soft: #F6DCE4;
+    --gonzalo: #4F9B6E;     /* leaf green */
+    --gonzalo-soft: #DDEFE3;
+    --adrian: #D98F2B;      /* marigold */
+    --adrian-soft: #F8E8CE;
+    --familia: #8B5A9E;     /* plum — everyone */
+    --familia-soft: #EBDDF0;
+
+    --accent: #E8714A;      /* terracotta — UI accent, not a person */
+    --shadow: rgba(46,42,36,0.12);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+    min-height: 100vh;
+  }
+
+  body { overflow-x: hidden; }
+
+  .screen { display: none; min-height: 100vh; flex-direction: column; }
+  .screen.active { display: flex; }
+
+  /* ===== Header ===== */
+  .app-header {
+    background: var(--paper-warm);
+    padding: 18px 16px 14px;
+    border-bottom: 2px solid var(--line);
+    position: relative;
+  }
+
+  .app-header .eyebrow {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 0.62rem;
+    letter-spacing: 0.16em;
+    color: var(--accent);
+    text-transform: uppercase;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .app-header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--ink);
+    letter-spacing: 0.01em;
+  }
+
+  .back-btn {
+    position: absolute;
+    top: 18px;
+    left: 14px;
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+    color: var(--ink);
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .header-action-btn {
+    position: absolute;
+    top: 16px;
+    right: 14px;
+    background: var(--accent);
+    border: none;
+    color: white;
+    border-radius: 18px;
+    padding: 8px 14px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+  }
+
+  .sync-dot {
+    position: absolute;
+    top: 22px;
+    right: 16px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--gonzalo);
+  }
+  .sync-dot.offline { background: var(--yoli); }
+
+  .content {
+    flex: 1;
+    padding: 18px 16px 100px;
+    max-width: 520px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  /* ===== Home / family chip strip ===== */
+  .family-strip {
+    display: flex;
+    gap: 8px;
+    padding: 14px 16px 4px;
+    overflow-x: auto;
+    background: var(--paper-warm);
+    border-bottom: 2px solid var(--line);
+  }
+
+  .person-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px 7px 8px;
+    border-radius: 20px;
+    border: 2px solid transparent;
+    background: white;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    cursor: pointer;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .person-chip .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  .person-chip.active { color: var(--ink); }
+  .person-chip[data-person="cesar"].active { border-color: var(--cesar); background: var(--cesar-soft); }
+  .person-chip[data-person="yoli"].active { border-color: var(--yoli); background: var(--yoli-soft); }
+  .person-chip[data-person="gonzalo"].active { border-color: var(--gonzalo); background: var(--gonzalo-soft); }
+  .person-chip[data-person="adrian"].active { border-color: var(--adrian); background: var(--adrian-soft); }
+  .person-chip[data-person="familia"].active { border-color: var(--familia); background: var(--familia-soft); }
+
+  .dot.cesar { background: var(--cesar); }
+  .dot.yoli { background: var(--yoli); }
+  .dot.gonzalo { background: var(--gonzalo); }
+  .dot.adrian { background: var(--adrian); }
+  .dot.familia { background: var(--familia); }
+
+  /* ===== Calendar ===== */
+  .calendar-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 4px 12px;
+  }
+
+  .calendar-nav button {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 1.5px solid var(--line);
+    background: white;
+    color: var(--ink);
+    font-size: 1rem;
+    cursor: pointer;
+  }
+
+  .calendar-nav .month-label {
+    font-size: 1.15rem;
+    font-weight: 700;
+    text-transform: capitalize;
+  }
+
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+
+  .cal-weekday {
+    text-align: center;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    padding-bottom: 6px;
+  }
+
+  .cal-day {
+    aspect-ratio: 1;
+    border-radius: 10px;
+    background: white;
+    border: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 2px;
+    cursor: pointer;
+    position: relative;
+    min-height: 44px;
+  }
+
+  .cal-day.empty { background: transparent; border: none; cursor: default; }
+  .cal-day.today { border: 2px solid var(--accent); }
+  .cal-day.festivo { background: var(--paper-warm); }
+  .cal-day.selected { background: var(--familia-soft); border-color: var(--familia); }
+
+  .cal-day-num {
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+
+  .cal-day-dots {
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .cal-day-dots .mini-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+  }
+
+  /* ===== Day events list ===== */
+  .day-events-section {
+    margin-top: 20px;
+  }
+
+  .day-events-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    text-transform: capitalize;
+  }
+
+  .event-card {
+    display: flex;
+    gap: 12px;
+    background: white;
+    border-radius: 12px;
+    padding: 13px 14px;
+    margin-bottom: 9px;
+    box-shadow: 0 2px 6px var(--shadow);
+    cursor: pointer;
+    border-left: 5px solid var(--line);
+  }
+
+  .event-card .ec-time {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    min-width: 52px;
+    flex-shrink: 0;
+    padding-top: 2px;
+  }
+
+  .event-card .ec-body { flex: 1; }
+  .event-card .ec-title { font-size: 0.96rem; font-weight: 700; margin-bottom: 4px; }
+  .event-card .ec-people { display: flex; gap: 5px; flex-wrap: wrap; }
+
+  .ec-person-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 0.66rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+  }
+  .ec-person-tag .mini-dot { width: 7px; height: 7px; border-radius: 50%; }
+
+  .empty-day-msg {
+    text-align: center;
+    padding: 30px 14px;
+    color: var(--ink-soft);
+    font-style: italic;
+    font-size: 0.88rem;
+  }
+
+  /* ===== FAB ===== */
+  .fab {
+    position: fixed;
+    bottom: 22px;
+    right: 20px;
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    font-size: 1.8rem;
+    box-shadow: 0 4px 14px var(--shadow);
+    cursor: pointer;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ===== Forms ===== */
+  .field-group { margin-bottom: 20px; }
+  .field-label {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink-soft);
+    font-weight: 700;
+    display: block;
+    margin-bottom: 9px;
+  }
+
+  .text-input, select.text-input, input[type="date"], input[type="time"] {
+    width: 100%;
+    padding: 13px 14px;
+    background: white;
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    color: var(--ink);
+    font-family: 'Iowan Old Style', Georgia, serif;
+    font-size: 1rem;
+  }
+
+  .person-select-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .person-select-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 12px;
+    border: 2px solid var(--line);
+    background: white;
+    cursor: pointer;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+  }
+  .person-select-card .dot { width: 12px; height: 12px; border-radius: 50%; }
+
+  .person-select-card.selected { color: var(--ink); }
+  .person-select-card[data-person="cesar"].selected { border-color: var(--cesar); background: var(--cesar-soft); }
+  .person-select-card[data-person="yoli"].selected { border-color: var(--yoli); background: var(--yoli-soft); }
+  .person-select-card[data-person="gonzalo"].selected { border-color: var(--gonzalo); background: var(--gonzalo-soft); }
+  .person-select-card[data-person="adrian"].selected { border-color: var(--adrian); background: var(--adrian-soft); }
+
+  .familia-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px;
+    border-radius: 12px;
+    border: 2px solid var(--line);
+    background: white;
+    cursor: pointer;
+    margin-top: 8px;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+  }
+  .familia-toggle.selected { border-color: var(--familia); background: var(--familia-soft); color: var(--ink); }
+  .familia-toggle .dot { width: 14px; height: 14px; border-radius: 50%; }
+
+  .recurrence-type-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .recurrence-option {
+    padding: 13px 14px;
+    border-radius: 12px;
+    border: 2px solid var(--line);
+    background: white;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+  .recurrence-option.selected { border-color: var(--accent); background: #FDF0EA; }
+
+  .weekday-picker {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+
+  .weekday-btn {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    border: 1.5px solid var(--line);
+    background: white;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .weekday-btn.selected { background: var(--accent); color: white; border-color: var(--accent); }
+
+  .multi-date-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .multi-date-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 16px;
+    background: var(--paper-warm);
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+  .multi-date-chip .remove-x { cursor: pointer; color: var(--ink-soft); }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 14px;
+    background: white;
+    border-radius: 12px;
+    border: 1.5px solid var(--line);
+  }
+
+  .toggle-row .toggle-label { font-size: 0.9rem; font-weight: 700; }
+  .toggle-row .toggle-desc { font-size: 0.74rem; color: var(--ink-soft); margin-top: 2px; }
+
+  .switch {
+    width: 46px; height: 26px;
+    border-radius: 14px;
+    background: var(--line);
+    position: relative;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .switch.on { background: var(--accent); }
+  .switch .knob {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: white;
+    position: absolute;
+    top: 3px; left: 3px;
+    transition: left 0.15s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .switch.on .knob { left: 23px; }
+
+  .reminder-options {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .reminder-chip {
+    padding: 9px 14px;
+    border-radius: 18px;
+    border: 1.5px solid var(--line);
+    background: white;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .reminder-chip.selected { background: var(--accent); color: white; border-color: var(--accent); }
+
+  .primary-action {
+    width: 100%;
+    padding: 16px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 10px;
+    box-shadow: 0 3px 10px var(--shadow);
+  }
+  .primary-action:disabled { opacity: 0.4; }
+
+  .secondary-action {
+    width: 100%;
+    padding: 14px;
+    background: none;
+    border: 1.5px solid var(--line);
+    color: var(--ink-soft);
+    border-radius: 12px;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+
+  .danger-action {
+    width: 100%;
+    padding: 13px;
+    background: #FBE4E0;
+    border: 1.5px solid #D9694D;
+    color: #B8462D;
+    border-radius: 12px;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 700;
+    font-size: 0.88rem;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+
+  .preview-dates-box {
+    background: var(--paper-warm);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    max-height: 140px;
+    overflow-y: auto;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: var(--paper);
+    padding: 11px 20px;
+    border-radius: 20px;
+    font-size: 0.82rem;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    z-index: 600;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    white-space: nowrap;
+    max-width: 90%;
+    text-align: center;
+  }
+  .toast.show { opacity: 1; }
+
+  .detail-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(46,42,36,0.5);
+    z-index: 500;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .detail-modal-overlay.visible { display: flex; }
+
+  .detail-modal {
+    background: var(--paper);
+    border-top: 3px solid var(--accent);
+    border-radius: 18px 18px 0 0;
+    width: 100%;
+    max-width: 520px;
+    max-height: 88vh;
+    overflow-y: auto;
+    padding: 22px 18px 30px;
+  }
+
+  .detail-modal h3 { font-size: 1.1rem; margin-bottom: 14px; }
+
+  .modal-close-btn {
+    width: 100%;
+    padding: 12px;
+    margin-top: 16px;
+    background: none;
+    border: 1.5px solid var(--line);
+    color: var(--ink-soft);
+    border-radius: 12px;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 700;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- SCREEN: HOME / CALENDAR -->
+<!-- ============================================================ -->
+<div class="screen active" id="screen-home">
+  <div class="app-header">
+    <div class="sync-dot" id="syncDot"></div>
+    <div class="eyebrow">Familia Ortiz Peña</div>
+    <h1>Nuestra agenda</h1>
+  </div>
+
+  <div class="family-strip" id="familyStrip">
+    <button class="person-chip active" data-person="todos" onclick="toggleFilter('todos')"><span>Todos</span></button>
+    <button class="person-chip" data-person="cesar" onclick="toggleFilter('cesar')"><span class="dot cesar"></span><span>César</span></button>
+    <button class="person-chip" data-person="yoli" onclick="toggleFilter('yoli')"><span class="dot yoli"></span><span>Yoli</span></button>
+    <button class="person-chip" data-person="gonzalo" onclick="toggleFilter('gonzalo')"><span class="dot gonzalo"></span><span>Gonzalo</span></button>
+    <button class="person-chip" data-person="adrian" onclick="toggleFilter('adrian')"><span class="dot adrian"></span><span>Adrián</span></button>
+    <button class="person-chip" data-person="familia" onclick="toggleFilter('familia')"><span class="dot familia"></span><span>Familia</span></button>
+  </div>
+
+  <div class="content">
+    <div class="calendar-nav">
+      <button onclick="changeMonth(-1)">‹</button>
+      <span class="month-label" id="monthLabel">Junio 2026</span>
+      <button onclick="changeMonth(1)">›</button>
+    </div>
+
+    <div class="calendar-grid" id="calendarWeekdays"></div>
+    <div class="calendar-grid" id="calendarDays" style="margin-top:4px;"></div>
+
+    <div class="day-events-section">
+      <div class="day-events-title" id="dayEventsTitle">Hoy</div>
+      <div id="dayEventsList"></div>
+    </div>
+  </div>
+
+  <button class="fab" onclick="goToAddEvent()">+</button>
+</div>
+
+<!-- ============================================================ -->
+<!-- SCREEN: ADD / EDIT EVENT -->
+<!-- ============================================================ -->
+<div class="screen" id="screen-event-form">
+  <div class="app-header">
+    <button class="back-btn" onclick="goHome()">←</button>
+    <h1 id="eventFormTitle">Nuevo evento</h1>
+  </div>
+  <div class="content">
+
+    <div class="field-group">
+      <span class="field-label">¿Qué es?</span>
+      <input type="text" class="text-input" id="eventTitleInput" placeholder="Ej: Clase de inglés">
+    </div>
+
+    <div class="field-group">
+      <span class="field-label">¿Para quién?</span>
+      <div class="person-select-grid" id="personSelectGrid">
+        <div class="person-select-card" data-person="cesar" onclick="togglePersonSelect('cesar')"><span class="dot cesar"></span>César</div>
+        <div class="person-select-card" data-person="yoli" onclick="togglePersonSelect('yoli')"><span class="dot yoli"></span>Yoli</div>
+        <div class="person-select-card" data-person="gonzalo" onclick="togglePersonSelect('gonzalo')"><span class="dot gonzalo"></span>Gonzalo</div>
+        <div class="person-select-card" data-person="adrian" onclick="togglePersonSelect('adrian')"><span class="dot adrian"></span>Adrián</div>
+      </div>
+      <div class="familia-toggle" id="familiaToggle" onclick="toggleFamiliaSelect()">
+        <span class="dot familia"></span><span>Toda la familia</span>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <span class="field-label">¿Cuándo?</span>
+      <div class="recurrence-type-row">
+        <div class="recurrence-option selected" data-type="single" onclick="selectRecurrenceType('single')">📅 Un solo día</div>
+        <div class="recurrence-option" data-type="multi" onclick="selectRecurrenceType('multi')">📌 Varios días sueltos</div>
+        <div class="recurrence-option" data-type="weekly" onclick="selectRecurrenceType('weekly')">🔁 Se repite cada semana</div>
+      </div>
+    </div>
+
+    <!-- Single date -->
+    <div class="field-group" id="singleDateBlock">
+      <span class="field-label">Fecha</span>
+      <input type="date" class="text-input" id="singleDateInput">
+    </div>
+
+    <!-- Multi date -->
+    <div class="field-group" id="multiDateBlock" style="display:none;">
+      <span class="field-label">Añadir fechas</span>
+      <div style="display:flex; gap:8px;">
+        <input type="date" class="text-input" id="multiDateInput">
+        <button class="secondary-action" style="width:auto; margin-top:0; white-space:nowrap;" onclick="addMultiDate()">Añadir</button>
+      </div>
+      <div class="multi-date-list" id="multiDateList"></div>
+    </div>
+
+    <!-- Weekly recurrence -->
+    <div class="field-group" id="weeklyBlock" style="display:none;">
+      <span class="field-label">¿Qué días de la semana?</span>
+      <div class="weekday-picker" id="weekdayPicker">
+        <button class="weekday-btn" data-day="1" onclick="toggleWeekday(1)">L</button>
+        <button class="weekday-btn" data-day="2" onclick="toggleWeekday(2)">M</button>
+        <button class="weekday-btn" data-day="3" onclick="toggleWeekday(3)">X</button>
+        <button class="weekday-btn" data-day="4" onclick="toggleWeekday(4)">J</button>
+        <button class="weekday-btn" data-day="5" onclick="toggleWeekday(5)">V</button>
+        <button class="weekday-btn" data-day="6" onclick="toggleWeekday(6)">S</button>
+        <button class="weekday-btn" data-day="0" onclick="toggleWeekday(0)">D</button>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:14px;">
+        <div style="flex:1;">
+          <span class="field-label">Desde</span>
+          <input type="date" class="text-input" id="weeklyFromInput">
+        </div>
+        <div style="flex:1;">
+          <span class="field-label">Hasta</span>
+          <input type="date" class="text-input" id="weeklyToInput">
+        </div>
+      </div>
+      <div class="toggle-row" style="margin-top:14px;">
+        <div>
+          <div class="toggle-label">Saltar festivos</div>
+          <div class="toggle-desc">No crea el evento si ese día es festivo en Madrid</div>
+        </div>
+        <div class="switch" id="skipHolidaysSwitch" onclick="toggleSkipHolidays()"><div class="knob"></div></div>
+      </div>
+      <div class="preview-dates-box" id="weeklyPreviewBox" style="display:none;"></div>
+    </div>
+
+    <div class="field-group">
+      <span class="field-label">Hora</span>
+      <div style="display:flex; gap:10px;">
+        <div style="flex:1;">
+          <input type="time" class="text-input" id="eventStartTime">
+        </div>
+        <div style="flex:1;">
+          <input type="time" class="text-input" id="eventEndTime">
+        </div>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <span class="field-label">Avisar antes</span>
+      <div class="reminder-options" id="reminderOptions">
+        <button class="reminder-chip" data-mins="0" onclick="selectReminder(0)">Sin aviso</button>
+        <button class="reminder-chip" data-mins="15" onclick="selectReminder(15)">15 min</button>
+        <button class="reminder-chip selected" data-mins="30" onclick="selectReminder(30)">30 min</button>
+        <button class="reminder-chip" data-mins="60" onclick="selectReminder(60)">1 hora</button>
+        <button class="reminder-chip" data-mins="1440" onclick="selectReminder(1440)">1 día antes</button>
+      </div>
+    </div>
+
+    <button class="primary-action" onclick="saveEvent()">Guardar evento</button>
+    <button class="danger-action" id="deleteEventBtn" style="display:none;" onclick="deleteCurrentEvent()">🗑️ Borrar este evento</button>
+  </div>
+</div>
+
+<!-- Modal: event detail -->
+<div class="detail-modal-overlay" id="eventDetailModal">
+  <div class="detail-modal" id="eventDetailContent"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
