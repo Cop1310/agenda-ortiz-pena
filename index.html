@@ -169,16 +169,30 @@
   .person-circle[data-person="adrian"].active { border-color: var(--adrian); background: var(--adrian-soft); color: var(--adrian); }
   .person-circle[data-person="familia"].active { border-color: var(--familia); background: var(--familia-soft); }
 
+  .ics-export-btn {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 13px;
+    background: var(--accent);
+    border: none;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: white;
+    cursor: pointer;
+  }
+
   .notif-toggle-btn {
     display: block;
     width: 100%;
     text-align: center;
-    padding: 10px;
+    padding: 8px;
     background: var(--paper-warm);
     border: none;
     border-bottom: 2px solid var(--line);
     font-family: 'Helvetica Neue', Arial, sans-serif;
-    font-size: 0.78rem;
+    font-size: 0.7rem;
     font-weight: 700;
     color: var(--ink-soft);
     cursor: pointer;
@@ -683,7 +697,8 @@
     <button class="person-circle" data-person="familia" onclick="toggleFilter('familia')">👪</button>
   </div>
 
-  <button class="notif-toggle-btn" id="notifToggleBtn" onclick="enableNotificationsClick()">🔕 Activar avisos en este móvil</button>
+  <button class="ics-export-btn" onclick="openIcsExportModal()">📅 Añadir mis eventos al calendario del móvil</button>
+  <button class="notif-toggle-btn" id="notifToggleBtn" onclick="enableNotificationsClick()">🔕 Activar avisos en este móvil (extra)</button>
 
   <div class="content">
     <div class="calendar-nav">
@@ -831,6 +846,11 @@
 <!-- Modal: event detail -->
 <div class="detail-modal-overlay" id="eventDetailModal">
   <div class="detail-modal" id="eventDetailContent"></div>
+</div>
+
+<!-- Modal: ics export -->
+<div class="detail-modal-overlay" id="icsExportModal">
+  <div class="detail-modal" id="icsExportContent"></div>
 </div>
 
 <div class="toast" id="toast"></div>

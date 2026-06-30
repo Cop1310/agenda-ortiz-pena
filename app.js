@@ -268,6 +268,164 @@ function escapeHtmlAg(str) {
 }
 
 /* ============== EVENT DETAIL MODAL ============== */
+/* ============== EXPORTAR .ICS (varios eventos de golpe) ============== */
+function openIcsExportModal() {
+  const modal = document.getElementById('icsExportContent');
+  modal.innerHTML = `
+    <h3>📅 Añadir mis eventos al calendario</h3>
+    <p style="color:var(--ink-soft); font-size:0.85rem; margin-bottom:18px;">
+      Elige de quién quieres descargar los próximos eventos. Se descargará un archivo que, al abrirlo, los añade todos de golpe a tu calendario del móvil (Google Calendar, Calendario de iPhone, etc.).
+    </p>
+    <div class="person-select-grid" style="margin-bottom:10px;">
+      <div class="person-select-card" data-person="cesar" onclick="toggleIcsPerson('cesar', this)"><span class="dot cesar"></span>César</div>
+      <div class="person-select-card" data-person="yoli" onclick="toggleIcsPerson('yoli', this)"><span class="dot yoli"></span>Yoli</div>
+      <div class="person-select-card" data-person="gonzalo" onclick="toggleIcsPerson('gonzalo', this)"><span class="dot gonzalo"></span>Gonzalo</div>
+      <div class="person-select-card" data-person="adrian" onclick="toggleIcsPerson('adrian', this)"><span class="dot adrian"></span>Adrián</div>
+    </div>
+    <div class="familia-toggle" id="icsFamiliaToggle" onclick="toggleIcsTodos()" style="margin-bottom:18px;">
+      <span class="dot familia"></span><span>Todos los eventos de la agenda</span>
+    </div>
+    <button class="primary-action" onclick="downloadIcsFile()">Descargar archivo</button>
+    <button class="modal-close-btn" onclick="closeIcsExportModal()">Cancelar</button>
+  `;
+  icsSelectedPeople = new Set();
+  icsSelectTodos = false;
+  document.getElementById('icsExportModal').classList.add('visible');
+}
+
+let icsSelectedPeople = new Set();
+let icsSelectTodos = false;
+
+function toggleIcsPerson(person, el) {
+  icsSelectTodos = false;
+  document.getElementById('icsFamiliaToggle').classList.remove('selected');
+  if (icsSelectedPeople.has(person)) {
+    icsSelectedPeople.delete(person);
+    el.classList.remove('selected');
+  } else {
+    icsSelectedPeople.add(person);
+    el.classList.add('selected');
+  }
+}
+
+function toggleIcsTodos() {
+  icsSelectTodos = !icsSelectTodos;
+  icsSelectedPeople.clear();
+  document.querySelectorAll('#icsExportContent .person-select-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('icsFamiliaToggle').classList.toggle('selected', icsSelectTodos);
+}
+
+function closeIcsExportModal() {
+  document.getElementById('icsExportModal').classList.remove('visible');
+}
+
+function getRelevantEventsForIcs() {
+  const todayStr = formatDateStr(new Date());
+  return Object.values(allEvents).filter(ev => {
+    if (ev.date < todayStr) return false; // only upcoming
+    if (icsSelectTodos) return true;
+    if (icsSelectedPeople.size === 0) return false;
+    if (ev.familia) return true;
+    return ev.people && ev.people.some(p => icsSelectedPeople.has(p));
+  });
+}
+
+function icsEscape(str) {
+  return (str || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+}
+
+function buildIcsContent(events) {
+  const toIcsDate = (dateStr, timeStr) => {
+    const d = parseDateStr(dateStr);
+    const [h, m] = (timeStr || '09:00').split(':').map(Number);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(h)}${pad(m)}00`;
+  };
+
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Agenda Ortiz Pena//ES',
+    'CALSCALE:GREGORIAN'
+  ];
+
+  events.forEach(ev => {
+    const start = toIcsDate(ev.date, ev.startTime);
+    const end = ev.endTime ? toIcsDate(ev.date, ev.endTime) : toIcsDate(ev.date, ev.startTime);
+    const who = ev.familia ? 'Familia' : (ev.people || []).map(p => PEOPLE_LABELS[p]).join(', ');
+    const description = [ev.note, `Para: ${who}`].filter(Boolean).join('\\n');
+
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:${Date.now()}-${Math.random().toString(36).slice(2)}@agenda-ortiz-pena`,
+      `DTSTAMP:${toIcsDate(formatDateStr(new Date()), '00:00')}`,
+      `DTSTART:${start}`,
+      `DTEND:${end}`,
+      `SUMMARY:${icsEscape(ev.title)}`,
+      `DESCRIPTION:${icsEscape(description)}`,
+      'END:VEVENT'
+    );
+  });
+
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n');
+}
+
+function downloadIcsFile() {
+  const events = getRelevantEventsForIcs();
+  if (events.length === 0) {
+    showToast('⚠️ Elige al menos una persona, o no hay eventos próximos');
+    return;
+  }
+
+  const icsContent = buildIcsContent(events);
+  const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'agenda-ortiz-pena.ics';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast(`✅ ${events.length} evento(s) descargados — ábrelos para añadirlos al calendario`);
+  closeIcsExportModal();
+}
+
+function buildGoogleCalendarUrl(ev) {
+  const dateObj = parseDateStr(ev.date);
+  const [startH, startM] = (ev.startTime || '09:00').split(':').map(Number);
+  const startDate = new Date(dateObj);
+  startDate.setHours(startH, startM, 0, 0);
+
+  let endDate;
+  if (ev.endTime) {
+    const [endH, endM] = ev.endTime.split(':').map(Number);
+    endDate = new Date(dateObj);
+    endDate.setHours(endH, endM, 0, 0);
+  } else {
+    endDate = new Date(startDate.getTime() + 60 * 60000); // default 1h
+  }
+
+  const toGCalFormat = (d) => {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+  };
+
+  const who = ev.familia ? 'Familia' : (ev.people || []).map(p => PEOPLE_LABELS[p]).join(', ');
+  const details = [ev.note, `Para: ${who}`].filter(Boolean).join('\n');
+
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: ev.title,
+    dates: `${toGCalFormat(startDate)}/${toGCalFormat(endDate)}`,
+    details: details
+  });
+
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
 function showEventDetail(id) {
   const ev = allEvents[id];
   if (!ev) return;
@@ -280,6 +438,7 @@ function showEventDetail(id) {
   const dateObj = parseDateStr(ev.date);
   const dayLabel = `${WEEKDAY_LABELS[dateObj.getDay()]} ${dateObj.getDate()} de ${MONTH_LABELS[dateObj.getMonth()].toLowerCase()} de ${dateObj.getFullYear()}`;
   const noteHtml = ev.note ? `<h3 style="margin-top:-6px;">${escapeHtmlAg(ev.note)}</h3>` : '';
+  const gcalUrl = buildGoogleCalendarUrl(ev);
 
   modal.innerHTML = `
     <h3>${escapeHtmlAg(ev.title)}</h3>
@@ -288,6 +447,7 @@ function showEventDetail(id) {
     <p style="margin-bottom:14px; font-weight:700;">${ev.startTime || ''}${ev.endTime ? ' - ' + ev.endTime : ''}</p>
     <div class="ec-people" style="margin-bottom:18px;">${peopleTags}</div>
     ${ev.seriesId ? `<p style="font-size:0.78rem; color:var(--ink-soft); margin-bottom:14px; font-style:italic;">Este evento forma parte de una serie repetida.</p>` : ''}
+    <a href="${gcalUrl}" target="_blank" rel="noopener" class="primary-action" style="display:block; text-align:center; text-decoration:none;">📅 Añadir a Google Calendar</a>
     <button class="secondary-action" onclick="closeEventDetail(); editEvent('${id}')">✏️ Editar</button>
     <button class="danger-action" onclick="confirmDeleteFromDetail('${id}')">🗑️ Borrar</button>
     <button class="modal-close-btn" onclick="closeEventDetail()">Cerrar</button>
