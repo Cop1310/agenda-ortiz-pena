@@ -146,28 +146,32 @@
     width: 52px;
     height: 52px;
     border-radius: 50%;
-    border: 2.5px solid var(--line);
-    background: white;
+    border: 2.5px solid transparent;
     font-family: 'Helvetica Neue', Arial, sans-serif;
     font-size: 1.05rem;
     font-weight: 700;
-    color: var(--ink-soft);
+    color: white;
     cursor: pointer;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
+    opacity: 0.45;
+    transition: opacity 0.15s, transform 0.15s;
   }
 
-  .person-circle[data-person="todos"] { font-size: 0.68rem; }
+  .person-circle[data-person="todos"] { font-size: 0.68rem; background: var(--ink-soft); }
+  .person-circle[data-person="cesar"] { background: var(--cesar); }
+  .person-circle[data-person="yoli"] { background: var(--yoli); }
+  .person-circle[data-person="gonzalo"] { background: var(--gonzalo); }
+  .person-circle[data-person="adrian"] { background: var(--adrian); }
+  .person-circle[data-person="familia"] { background: var(--familia); }
 
-  .person-circle.active { color: var(--ink); }
-  .person-circle[data-person="todos"].active { border-color: var(--accent); background: #FDF0EA; color: var(--accent); }
-  .person-circle[data-person="cesar"].active { border-color: var(--cesar); background: var(--cesar-soft); color: var(--cesar); }
-  .person-circle[data-person="yoli"].active { border-color: var(--yoli); background: var(--yoli-soft); color: var(--yoli); }
-  .person-circle[data-person="gonzalo"].active { border-color: var(--gonzalo); background: var(--gonzalo-soft); color: var(--gonzalo); }
-  .person-circle[data-person="adrian"].active { border-color: var(--adrian); background: var(--adrian-soft); color: var(--adrian); }
-  .person-circle[data-person="familia"].active { border-color: var(--familia); background: var(--familia-soft); }
+  .person-circle.active {
+    opacity: 1;
+    border-color: var(--ink);
+    transform: scale(1.06);
+  }
 
   .ics-export-btn {
     display: block;
@@ -318,6 +322,7 @@
 
   .event-card .ec-body { flex: 1; }
   .event-card .ec-title { font-size: 0.96rem; font-weight: 700; margin-bottom: 4px; }
+  .event-card .ec-note { font-size: 0.82rem; font-style: italic; color: var(--ink-soft); margin-bottom: 4px; }
   .event-card .ec-people { display: flex; gap: 5px; flex-wrap: wrap; }
 
   .ec-person-tag {
@@ -455,6 +460,17 @@
   .familia-toggle.selected { border-color: var(--familia); background: var(--familia-soft); color: var(--ink); }
   .familia-toggle .dot { width: 14px; height: 14px; border-radius: 50%; }
 
+  .new-events-badge {
+    margin-left: auto;
+    background: var(--accent);
+    color: white;
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+
   .recurrence-type-row {
     display: flex;
     flex-direction: column;
@@ -544,6 +560,71 @@
     box-shadow: 0 1px 3px rgba(0,0,0,0.2);
   }
   .switch.on .knob { left: 23px; }
+
+  .digital-time-picker {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: white;
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    padding: 14px;
+  }
+
+  .digital-select {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--ink);
+    border: none;
+    background: var(--paper-warm);
+    border-radius: 8px;
+    padding: 8px 10px;
+    text-align: center;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  .digital-colon {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+  }
+
+  .duration-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 7px;
+  }
+
+  .duration-btn {
+    padding: 10px 4px;
+    border-radius: 10px;
+    border: 1.5px solid var(--line);
+    background: white;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .duration-btn.selected { background: var(--accent); color: white; border-color: var(--accent); }
+
+  .reminder-fixed-btn {
+    width: 100%;
+    padding: 13px;
+    border-radius: 12px;
+    border: 1.5px solid var(--line);
+    background: white;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    cursor: pointer;
+    margin-bottom: 10px;
+  }
+  .reminder-fixed-btn.selected { background: var(--accent); color: white; border-color: var(--accent); }
 
   .reminder-options {
     display: flex;
@@ -816,24 +897,35 @@
     </div>
 
     <div class="field-group">
-      <span class="field-label">Hora</span>
-      <div style="display:flex; gap:10px;">
-        <div style="flex:1;">
-          <input type="time" class="text-input" id="eventStartTime">
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">Todo el día</div>
+          <div class="toggle-desc">Para cumpleaños, vacaciones, etc.</div>
         </div>
-        <div style="flex:1;">
-          <input type="time" class="text-input" id="eventEndTime">
-        </div>
+        <div class="switch" id="allDaySwitch" onclick="toggleAllDay()"><div class="knob"></div></div>
       </div>
+    </div>
+
+    <div class="field-group" id="timeFieldsBlock">
+      <span class="field-label">Hora de inicio</span>
+      <div class="digital-time-picker">
+        <select class="digital-select" id="eventStartHour"></select>
+        <span class="digital-colon">:</span>
+        <select class="digital-select" id="eventStartMinute"></select>
+      </div>
+
+      <span class="field-label" style="margin-top:18px;">Duración</span>
+      <div class="duration-grid" id="durationGrid"></div>
     </div>
 
     <div class="field-group">
       <span class="field-label">Avisar antes</span>
+      <button class="reminder-fixed-btn" id="reminderFixed10Btn" onclick="selectFixed10amReminder()">⏰ Avisar a las 10:00 ese día</button>
       <div class="reminder-options" id="reminderOptions">
         <button class="reminder-chip" data-mins="0" onclick="selectReminder(0)">Sin aviso</button>
-        <button class="reminder-chip" data-mins="15" onclick="selectReminder(15)">15 min</button>
-        <button class="reminder-chip selected" data-mins="30" onclick="selectReminder(30)">30 min</button>
-        <button class="reminder-chip" data-mins="60" onclick="selectReminder(60)">1 hora</button>
+        <button class="reminder-chip" data-mins="15" onclick="selectReminder(15)">15 min antes</button>
+        <button class="reminder-chip selected" data-mins="30" onclick="selectReminder(30)">30 min antes</button>
+        <button class="reminder-chip" data-mins="60" onclick="selectReminder(60)">1 hora antes</button>
         <button class="reminder-chip" data-mins="1440" onclick="selectReminder(1440)">1 día antes</button>
       </div>
     </div>

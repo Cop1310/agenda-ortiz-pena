@@ -61,7 +61,11 @@ let formState = {
   multiDates: [],
   selectedWeekdays: new Set(),
   skipHolidays: true,
-  reminderMins: 30
+  reminderMins: 30,
+  isAllDay: false,
+  startHour: 9,
+  startMinute: 0,
+  durationMins: 60
 };
 
 function formatDateStr(date) {
@@ -246,8 +250,8 @@ function renderEventCard(ev) {
     ? `<span class="ec-person-tag"><span class="mini-dot dot familia"></span>Familia</span>`
     : (ev.people || []).map(p => `<span class="ec-person-tag"><span class="mini-dot dot ${p}"></span>${PEOPLE_LABELS[p]}</span>`).join('');
 
-  const timeLabel = ev.startTime ? `${ev.startTime}${ev.endTime ? ' - ' + ev.endTime : ''}` : '';
-  const noteHtml = ev.note ? `<div class="ec-title">${escapeHtmlAg(ev.note)}</div>` : '';
+  const timeLabel = ev.isAllDay ? 'Todo\nel día' : (ev.startTime ? `${ev.startTime}${ev.endTime ? ' - ' + ev.endTime : ''}` : '');
+  const noteHtml = ev.note ? `<div class="ec-note">${escapeHtmlAg(ev.note)}</div>` : '';
 
   return `
     <div class="event-card" style="border-left-color:${borderColor};" onclick="showEventDetail('${ev.id}')">
@@ -269,21 +273,60 @@ function escapeHtmlAg(str) {
 
 /* ============== EVENT DETAIL MODAL ============== */
 /* ============== EXPORTAR .ICS (varios eventos de golpe) ============== */
+/* ============== EXPORTAR .ICS (varios eventos de golpe) ============== */
+const LAST_DOWNLOAD_KEY = 'agenda_last_download';
+
+function getLastDownloadMap() {
+  try {
+    const raw = localStorage.getItem(LAST_DOWNLOAD_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) { return {}; }
+}
+
+function setLastDownload(personKey) {
+  const map = getLastDownloadMap();
+  map[personKey] = Date.now();
+  try { localStorage.setItem(LAST_DOWNLOAD_KEY, JSON.stringify(map)); } catch (e) { /* ignore */ }
+}
+
+function countNewEventsFor(personKey) {
+  const lastMap = getLastDownloadMap();
+  const lastTime = lastMap[personKey] || 0;
+  const todayStr = formatDateStr(new Date());
+
+  return Object.values(allEvents).filter(ev => {
+    if (ev.date < todayStr) return false;
+    const matches = personKey === 'todos'
+      ? true
+      : (ev.familia || (ev.people && ev.people.includes(personKey)));
+    if (!matches) return false;
+    return (ev.updatedAt || 0) > lastTime;
+  }).length;
+}
+
 function openIcsExportModal() {
   const modal = document.getElementById('icsExportContent');
+
+  const personRow = (key, label, dotClass) => {
+    const count = countNewEventsFor(key);
+    const badge = count > 0 ? `<span class="new-events-badge">${count} nuevo${count > 1 ? 's' : ''}</span>` : '';
+    return `<div class="person-select-card" data-person="${key}" onclick="toggleIcsPerson('${key}', this)"><span class="dot ${dotClass}"></span>${label}${badge}</div>`;
+  };
+
   modal.innerHTML = `
     <h3>📅 Añadir mis eventos al calendario</h3>
     <p style="color:var(--ink-soft); font-size:0.85rem; margin-bottom:18px;">
-      Elige de quién quieres descargar los próximos eventos. Se descargará un archivo que, al abrirlo, los añade todos de golpe a tu calendario del móvil (Google Calendar, Calendario de iPhone, etc.).
+      Elige quién eres. Se descargará un archivo que, al abrirlo, añade tus eventos próximos de golpe a tu calendario del móvil.
     </p>
     <div class="person-select-grid" style="margin-bottom:10px;">
-      <div class="person-select-card" data-person="cesar" onclick="toggleIcsPerson('cesar', this)"><span class="dot cesar"></span>César</div>
-      <div class="person-select-card" data-person="yoli" onclick="toggleIcsPerson('yoli', this)"><span class="dot yoli"></span>Yoli</div>
-      <div class="person-select-card" data-person="gonzalo" onclick="toggleIcsPerson('gonzalo', this)"><span class="dot gonzalo"></span>Gonzalo</div>
-      <div class="person-select-card" data-person="adrian" onclick="toggleIcsPerson('adrian', this)"><span class="dot adrian"></span>Adrián</div>
+      ${personRow('cesar', 'César', 'cesar')}
+      ${personRow('yoli', 'Yoli', 'yoli')}
+      ${personRow('gonzalo', 'Gonzalo', 'gonzalo')}
+      ${personRow('adrian', 'Adrián', 'adrian')}
     </div>
     <div class="familia-toggle" id="icsFamiliaToggle" onclick="toggleIcsTodos()" style="margin-bottom:18px;">
       <span class="dot familia"></span><span>Todos los eventos de la agenda</span>
+      ${countNewEventsFor('todos') > 0 ? `<span class="new-events-badge">${countNewEventsFor('todos')} nuevos</span>` : ''}
     </div>
     <button class="primary-action" onclick="downloadIcsFile()">Descargar archivo</button>
     <button class="modal-close-btn" onclick="closeIcsExportModal()">Cancelar</button>
@@ -321,13 +364,15 @@ function closeIcsExportModal() {
 
 function getRelevantEventsForIcs() {
   const todayStr = formatDateStr(new Date());
-  return Object.values(allEvents).filter(ev => {
-    if (ev.date < todayStr) return false; // only upcoming
-    if (icsSelectTodos) return true;
-    if (icsSelectedPeople.size === 0) return false;
-    if (ev.familia) return true;
-    return ev.people && ev.people.some(p => icsSelectedPeople.has(p));
-  });
+  return Object.entries(allEvents)
+    .map(([id, ev]) => ({ id, ...ev }))
+    .filter(ev => {
+      if (ev.date < todayStr) return false; // only upcoming
+      if (icsSelectTodos) return true;
+      if (icsSelectedPeople.size === 0) return false;
+      if (ev.familia) return true;
+      return ev.people && ev.people.some(p => icsSelectedPeople.has(p));
+    });
 }
 
 function icsEscape(str) {
@@ -342,6 +387,18 @@ function buildIcsContent(events) {
     return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(h)}${pad(m)}00`;
   };
 
+  const toIcsDateOnly = (dateStr) => {
+    const d = parseDateStr(dateStr);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
+  };
+
+  const addDays = (dateStr, n) => {
+    const d = parseDateStr(dateStr);
+    d.setDate(d.getDate() + n);
+    return formatDateStr(d);
+  };
+
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -350,21 +407,32 @@ function buildIcsContent(events) {
   ];
 
   events.forEach(ev => {
-    const start = toIcsDate(ev.date, ev.startTime);
-    const end = ev.endTime ? toIcsDate(ev.date, ev.endTime) : toIcsDate(ev.date, ev.startTime);
     const who = ev.familia ? 'Familia' : (ev.people || []).map(p => PEOPLE_LABELS[p]).join(', ');
     const description = [ev.note, `Para: ${who}`].filter(Boolean).join('\\n');
 
-    lines.push(
+    const eventLines = [
       'BEGIN:VEVENT',
-      `UID:${Date.now()}-${Math.random().toString(36).slice(2)}@agenda-ortiz-pena`,
-      `DTSTAMP:${toIcsDate(formatDateStr(new Date()), '00:00')}`,
-      `DTSTART:${start}`,
-      `DTEND:${end}`,
+      `UID:${ev.id}@agenda-ortiz-pena`,
+      `DTSTAMP:${toIcsDate(formatDateStr(new Date()), '00:00')}`
+    ];
+
+    if (ev.isAllDay) {
+      // All-day events use DATE value type; DTEND is exclusive (next day)
+      eventLines.push(`DTSTART;VALUE=DATE:${toIcsDateOnly(ev.date)}`);
+      eventLines.push(`DTEND;VALUE=DATE:${toIcsDateOnly(addDays(ev.date, 1))}`);
+    } else {
+      const start = toIcsDate(ev.date, ev.startTime);
+      const end = ev.endTime ? toIcsDate(ev.date, ev.endTime) : toIcsDate(ev.date, ev.startTime);
+      eventLines.push(`DTSTART:${start}`, `DTEND:${end}`);
+    }
+
+    eventLines.push(
       `SUMMARY:${icsEscape(ev.title)}`,
       `DESCRIPTION:${icsEscape(description)}`,
       'END:VEVENT'
     );
+
+    lines.push(...eventLines);
   });
 
   lines.push('END:VCALENDAR');
@@ -389,37 +457,56 @@ function downloadIcsFile() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 
+  if (icsSelectTodos) {
+    setLastDownload('todos');
+  } else {
+    icsSelectedPeople.forEach(p => setLastDownload(p));
+  }
+
   showToast(`✅ ${events.length} evento(s) descargados — ábrelos para añadirlos al calendario`);
   closeIcsExportModal();
 }
 
 function buildGoogleCalendarUrl(ev) {
-  const dateObj = parseDateStr(ev.date);
-  const [startH, startM] = (ev.startTime || '09:00').split(':').map(Number);
-  const startDate = new Date(dateObj);
-  startDate.setHours(startH, startM, 0, 0);
-
-  let endDate;
-  if (ev.endTime) {
-    const [endH, endM] = ev.endTime.split(':').map(Number);
-    endDate = new Date(dateObj);
-    endDate.setHours(endH, endM, 0, 0);
-  } else {
-    endDate = new Date(startDate.getTime() + 60 * 60000); // default 1h
-  }
-
-  const toGCalFormat = (d) => {
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
-  };
-
   const who = ev.familia ? 'Familia' : (ev.people || []).map(p => PEOPLE_LABELS[p]).join(', ');
   const details = [ev.note, `Para: ${who}`].filter(Boolean).join('\n');
+
+  let datesParam;
+  if (ev.isAllDay) {
+    const dateObj = parseDateStr(ev.date);
+    const nextDay = new Date(dateObj);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const toDateOnly = (d) => {
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
+    };
+    datesParam = `${toDateOnly(dateObj)}/${toDateOnly(nextDay)}`;
+  } else {
+    const dateObj = parseDateStr(ev.date);
+    const [startH, startM] = (ev.startTime || '09:00').split(':').map(Number);
+    const startDate = new Date(dateObj);
+    startDate.setHours(startH, startM, 0, 0);
+
+    let endDate;
+    if (ev.endTime) {
+      const [endH, endM] = ev.endTime.split(':').map(Number);
+      endDate = new Date(dateObj);
+      endDate.setHours(endH, endM, 0, 0);
+    } else {
+      endDate = new Date(startDate.getTime() + 60 * 60000);
+    }
+
+    const toGCalFormat = (d) => {
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+    };
+    datesParam = `${toGCalFormat(startDate)}/${toGCalFormat(endDate)}`;
+  }
 
   const params = new URLSearchParams({
     action: 'TEMPLATE',
     text: ev.title,
-    dates: `${toGCalFormat(startDate)}/${toGCalFormat(endDate)}`,
+    dates: datesParam,
     details: details
   });
 
@@ -437,14 +524,14 @@ function showEventDetail(id) {
 
   const dateObj = parseDateStr(ev.date);
   const dayLabel = `${WEEKDAY_LABELS[dateObj.getDay()]} ${dateObj.getDate()} de ${MONTH_LABELS[dateObj.getMonth()].toLowerCase()} de ${dateObj.getFullYear()}`;
-  const noteHtml = ev.note ? `<h3 style="margin-top:-6px;">${escapeHtmlAg(ev.note)}</h3>` : '';
+  const noteHtml = ev.note ? `<p class="ec-note" style="margin-top:-8px; margin-bottom:10px; font-size:0.88rem;">${escapeHtmlAg(ev.note)}</p>` : '';
   const gcalUrl = buildGoogleCalendarUrl(ev);
 
   modal.innerHTML = `
     <h3>${escapeHtmlAg(ev.title)}</h3>
     ${noteHtml}
     <p style="margin-bottom:10px; color:var(--ink-soft);">${dayLabel}</p>
-    <p style="margin-bottom:14px; font-weight:700;">${ev.startTime || ''}${ev.endTime ? ' - ' + ev.endTime : ''}</p>
+    <p style="margin-bottom:14px; font-weight:700;">${ev.isAllDay ? 'Todo el día' : (ev.startTime || '') + (ev.endTime ? ' - ' + ev.endTime : '')}</p>
     <div class="ec-people" style="margin-bottom:18px;">${peopleTags}</div>
     ${ev.seriesId ? `<p style="font-size:0.78rem; color:var(--ink-soft); margin-bottom:14px; font-style:italic;">Este evento forma parte de una serie repetida.</p>` : ''}
     <a href="${gcalUrl}" target="_blank" rel="noopener" class="primary-action" style="display:block; text-align:center; text-decoration:none;">📅 Añadir a Google Calendar</a>
@@ -474,8 +561,6 @@ function goToAddEvent() {
   document.getElementById('eventTitleInput').value = '';
   document.getElementById('eventNoteInput').value = '';
   document.getElementById('singleDateInput').value = selectedDayStr;
-  document.getElementById('eventStartTime').value = '';
-  document.getElementById('eventEndTime').value = '';
   showScreen('screen-event-form');
 }
 
@@ -489,9 +574,19 @@ function editEvent(id) {
   document.getElementById('deleteEventBtn').style.display = 'block';
   document.getElementById('eventTitleInput').value = ev.title;
   document.getElementById('eventNoteInput').value = ev.note || '';
-  document.getElementById('eventStartTime').value = ev.startTime || '';
-  document.getElementById('eventEndTime').value = ev.endTime || '';
   document.getElementById('singleDateInput').value = ev.date;
+
+  formState.isAllDay = !!ev.isAllDay;
+  if (!ev.isAllDay && ev.startTime) {
+    const [h, m] = ev.startTime.split(':').map(Number);
+    formState.startHour = h;
+    formState.startMinute = m;
+    if (ev.endTime) {
+      const [eh, em] = ev.endTime.split(':').map(Number);
+      formState.durationMins = (eh * 60 + em) - (h * 60 + m);
+      if (formState.durationMins <= 0) formState.durationMins = 60;
+    }
+  }
 
   if (ev.familia) {
     formState.isFamilia = true;
@@ -499,9 +594,15 @@ function editEvent(id) {
     formState.selectedPeople = new Set(ev.people || []);
   }
 
-  formState.reminderMins = ev.reminderMins != null ? ev.reminderMins : 30;
+  if (ev.reminderMins === 'fixed10am') {
+    formState.fixed10am = true;
+  } else {
+    formState.reminderMins = ev.reminderMins != null ? ev.reminderMins : 30;
+  }
   formState.recurrenceType = 'single'; // editing always edits as single occurrence
 
+  initDigitalTimePicker();
+  initDurationGrid();
   syncFormUI();
   showScreen('screen-event-form');
 }
@@ -515,9 +616,70 @@ function resetFormState() {
     multiDates: [],
     selectedWeekdays: new Set(),
     skipHolidays: true,
-    reminderMins: 30
+    reminderMins: 30,
+    isAllDay: false,
+    startHour: 9,
+    startMinute: 0,
+    durationMins: 60
   };
+  initDigitalTimePicker();
+  initDurationGrid();
   syncFormUI();
+}
+
+function initDigitalTimePicker() {
+  const hourSelect = document.getElementById('eventStartHour');
+  const minuteSelect = document.getElementById('eventStartMinute');
+  if (hourSelect.options.length === 0) {
+    for (let h = 0; h < 24; h++) {
+      const opt = document.createElement('option');
+      opt.value = h;
+      opt.textContent = String(h).padStart(2, '0');
+      hourSelect.appendChild(opt);
+    }
+    for (let m = 0; m < 60; m += 5) {
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = String(m).padStart(2, '0');
+      minuteSelect.appendChild(opt);
+    }
+    hourSelect.addEventListener('change', () => { formState.startHour = Number(hourSelect.value); });
+    minuteSelect.addEventListener('change', () => { formState.startMinute = Number(minuteSelect.value); });
+  }
+  hourSelect.value = formState.startHour;
+  minuteSelect.value = formState.startMinute;
+}
+
+const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120, 180, 240]; // minutes
+
+function initDurationGrid() {
+  const grid = document.getElementById('durationGrid');
+  if (grid.children.length > 0) {
+    syncDurationGrid();
+    return;
+  }
+  grid.innerHTML = DURATION_OPTIONS.map(mins => {
+    const label = mins < 60 ? `${mins} min` : (mins % 60 === 0 ? `${mins/60} h` : `${Math.floor(mins/60)}h ${mins%60}min`);
+    return `<button type="button" class="duration-btn" data-mins="${mins}" onclick="selectDuration(${mins})">${label}</button>`;
+  }).join('');
+  syncDurationGrid();
+}
+
+function syncDurationGrid() {
+  document.querySelectorAll('.duration-btn').forEach(btn => {
+    btn.classList.toggle('selected', Number(btn.dataset.mins) === formState.durationMins);
+  });
+}
+
+function selectDuration(mins) {
+  formState.durationMins = mins;
+  syncDurationGrid();
+}
+
+function toggleAllDay() {
+  formState.isAllDay = !formState.isAllDay;
+  document.getElementById('allDaySwitch').classList.toggle('on', formState.isAllDay);
+  document.getElementById('timeFieldsBlock').style.display = formState.isAllDay ? 'none' : 'block';
 }
 
 function syncFormUI() {
@@ -541,11 +703,25 @@ function syncFormUI() {
 
   document.getElementById('skipHolidaysSwitch').classList.toggle('on', formState.skipHolidays);
 
+  document.getElementById('allDaySwitch').classList.toggle('on', formState.isAllDay);
+  document.getElementById('timeFieldsBlock').style.display = formState.isAllDay ? 'none' : 'block';
+
   document.querySelectorAll('.reminder-chip').forEach(chip => {
-    chip.classList.toggle('selected', Number(chip.dataset.mins) === formState.reminderMins);
+    chip.classList.toggle('selected', Number(chip.dataset.mins) === formState.reminderMins && !formState.fixed10am);
   });
+  document.getElementById('reminderFixed10Btn').classList.toggle('selected', !!formState.fixed10am);
 
   updateWeeklyPreview();
+}
+
+function selectFixed10amReminder() {
+  formState.fixed10am = !formState.fixed10am;
+  if (formState.fixed10am) {
+    formState.reminderMins = null; // handled specially on save
+  } else {
+    formState.reminderMins = 30;
+  }
+  syncFormUI();
 }
 
 function togglePersonSelect(person) {
@@ -698,17 +874,31 @@ async function saveEvent() {
     return;
   }
 
-  const startTime = document.getElementById('eventStartTime').value;
-  const endTime = document.getElementById('eventEndTime').value;
   const note = document.getElementById('eventNoteInput').value.trim();
+
+  let startTime = '';
+  let endTime = '';
+  if (!formState.isAllDay) {
+    const pad = (n) => String(n).padStart(2, '0');
+    startTime = `${pad(formState.startHour)}:${pad(formState.startMinute)}`;
+    const totalStartMins = formState.startHour * 60 + formState.startMinute;
+    const totalEndMins = totalStartMins + formState.durationMins;
+    const endH = Math.floor((totalEndMins % 1440) / 60);
+    const endM = totalEndMins % 60;
+    endTime = `${pad(endH)}:${pad(endM)}`;
+  }
+
+  const reminderMins = formState.fixed10am ? 'fixed10am' : formState.reminderMins;
 
   const baseEvent = {
     title,
     note,
     familia: formState.isFamilia,
     people: formState.isFamilia ? [] : Array.from(formState.selectedPeople),
+    isAllDay: formState.isAllDay,
     startTime, endTime,
-    reminderMins: formState.reminderMins
+    reminderMins,
+    updatedAt: Date.now()
   };
 
   // Editing an existing single event
@@ -820,21 +1010,28 @@ function checkUpcomingEvents() {
   const now = new Date();
 
   Object.entries(allEvents).forEach(([id, ev]) => {
-    if (ev.reminderMins == null || ev.reminderMins <= 0) return;
-    if (!ev.startTime) return;
+    if (ev.reminderMins == null) return;
+    if (ev.reminderMins !== 'fixed10am' && ev.reminderMins <= 0) return;
     if (notified.has(id)) return;
 
-    const [h, m] = ev.startTime.split(':').map(Number);
-    const eventDateTime = parseDateStr(ev.date);
-    eventDateTime.setHours(h, m, 0, 0);
-
-    const notifyAt = new Date(eventDateTime.getTime() - ev.reminderMins * 60000);
+    let notifyAt;
+    if (ev.reminderMins === 'fixed10am') {
+      notifyAt = parseDateStr(ev.date);
+      notifyAt.setHours(10, 0, 0, 0);
+    } else {
+      if (!ev.startTime) return;
+      const [h, m] = ev.startTime.split(':').map(Number);
+      const eventDateTime = parseDateStr(ev.date);
+      eventDateTime.setHours(h, m, 0, 0);
+      notifyAt = new Date(eventDateTime.getTime() - ev.reminderMins * 60000);
+    }
 
     const diff = now - notifyAt;
     if (diff >= 0 && diff < 90000) {
       const who = ev.familia ? 'Familia' : (ev.people || []).map(p => PEOPLE_LABELS[p]).join(', ');
+      const timeLabel = ev.isAllDay ? 'Todo el día' : `${ev.startTime}${ev.endTime ? ' a ' + ev.endTime : ''}`;
       fireNotification('📅 ' + ev.title, {
-        body: `${who} — ${ev.startTime}${ev.endTime ? ' a ' + ev.endTime : ''}${ev.note ? '\n' + ev.note : ''}`,
+        body: `${who} — ${timeLabel}${ev.note ? '\n' + ev.note : ''}`,
         tag: id
       });
       notified.add(id);
