@@ -80,6 +80,14 @@
     letter-spacing: 0.01em;
   }
 
+  .family-title {
+    font-size: 2rem;
+    font-weight: 900;
+    color: #C0392B;
+    letter-spacing: 0.01em;
+    text-align: center;
+  }
+
   .back-btn {
     position: absolute;
     top: 18px;
@@ -132,10 +140,33 @@
   }
 
   /* ===== Home / family circle strip ===== */
+  .todos-btn {
+    display: block;
+    width: calc(100% - 32px);
+    margin: 14px 16px 10px;
+    padding: 13px;
+    border-radius: 12px;
+    border: 2.5px solid var(--line);
+    background: white;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 0.15s;
+  }
+  .todos-btn.active {
+    opacity: 1;
+    border-color: var(--accent);
+    background: #FDF0EA;
+    color: var(--accent);
+  }
+
   .family-strip {
     display: flex;
-    gap: 10px;
-    padding: 16px 16px 6px;
+    gap: 12px;
+    padding: 0 16px 14px;
     overflow-x: auto;
     background: var(--paper-warm);
     border-bottom: 2px solid var(--line);
@@ -143,34 +174,67 @@
   }
 
   .person-circle {
-    width: 52px;
-    height: 52px;
+    width: 58px;
+    height: 58px;
     border-radius: 50%;
-    border: 2.5px solid transparent;
-    font-family: 'Helvetica Neue', Arial, sans-serif;
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: white;
+    border: 4px solid transparent;
+    background: var(--paper-warm);
     cursor: pointer;
     flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0.45;
+    padding: 0;
+    overflow: hidden;
+    opacity: 0.5;
     transition: opacity 0.15s, transform 0.15s;
   }
 
-  .person-circle[data-person="todos"] { font-size: 0.68rem; background: var(--ink-soft); }
-  .person-circle[data-person="cesar"] { background: var(--cesar); }
-  .person-circle[data-person="yoli"] { background: var(--yoli); }
-  .person-circle[data-person="gonzalo"] { background: var(--gonzalo); }
-  .person-circle[data-person="adrian"] { background: var(--adrian); }
-  .person-circle[data-person="familia"] { background: var(--familia); }
+  .person-circle .circle-inner {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: white;
+  }
+
+  .person-circle .circle-inner.has-photo {
+    background-size: cover;
+    background-position: center;
+    color: transparent;
+  }
+
+  .person-circle[data-person="cesar"] { border-color: var(--cesar); }
+  .person-circle[data-person="cesar"] .circle-inner { background-color: var(--cesar); }
+  .person-circle[data-person="yoli"] { border-color: var(--yoli); }
+  .person-circle[data-person="yoli"] .circle-inner { background-color: var(--yoli); }
+  .person-circle[data-person="gonzalo"] { border-color: var(--gonzalo); }
+  .person-circle[data-person="gonzalo"] .circle-inner { background-color: var(--gonzalo); }
+  .person-circle[data-person="adrian"] { border-color: var(--adrian); }
+  .person-circle[data-person="adrian"] .circle-inner { background-color: var(--adrian); }
+  .person-circle[data-person="familia"] { border-color: var(--familia); }
+  .person-circle[data-person="familia"] .circle-inner { background-color: var(--familia); font-size: 1.4rem; }
 
   .person-circle.active {
     opacity: 1;
-    border-color: var(--ink);
-    transform: scale(1.06);
+    transform: scale(1.08);
+  }
+
+  .edit-photos-link {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 6px;
+    background: var(--paper-warm);
+    border: none;
+    border-bottom: 2px solid var(--line);
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    cursor: pointer;
   }
 
   .ics-export-btn {
@@ -264,8 +328,10 @@
   }
 
   .cal-day.empty { background: transparent; border: none; cursor: default; }
+  .cal-day.weekend { background: #F0E8D8; }
   .cal-day.today { border: 2px solid var(--accent); }
   .cal-day.festivo { background: var(--paper-warm); }
+  .cal-day.festivo.weekend { background: #EAE0CC; }
   .cal-day.selected { background: var(--familia-soft); border-color: var(--familia); }
 
   .cal-day-num {
@@ -274,16 +340,22 @@
     margin-bottom: 2px;
   }
 
+  .cal-day-num.sunday { color: #C0392B; font-weight: 900; }
+
   .cal-day-dots {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
     gap: 2px;
-    flex-wrap: wrap;
-    justify-content: center;
+    justify-items: center;
+    align-content: center;
+    width: 100%;
+    padding: 0 1px;
   }
 
   .cal-day-dots .mini-dot {
-    width: 5px; height: 5px;
+    width: 7px; height: 7px;
     border-radius: 50%;
+    flex-shrink: 0;
   }
 
   /* ===== Day events list ===== */
@@ -330,11 +402,15 @@
     align-items: center;
     gap: 4px;
     font-family: 'Helvetica Neue', Arial, sans-serif;
-    font-size: 0.66rem;
+    font-size: 0.7rem;
     font-weight: 700;
-    color: var(--ink-soft);
   }
   .ec-person-tag .mini-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .ec-person-tag.cesar { color: var(--cesar); }
+  .ec-person-tag.yoli { color: var(--yoli); }
+  .ec-person-tag.gonzalo { color: var(--gonzalo); }
+  .ec-person-tag.adrian { color: var(--adrian); }
+  .ec-person-tag.familia { color: var(--familia); }
 
   .empty-day-msg {
     text-align: center;
@@ -469,6 +545,45 @@
     padding: 2px 7px;
     border-radius: 10px;
     white-space: nowrap;
+  }
+
+  /* ===== Photo editing ===== */
+  .photo-edit-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .photo-edit-preview {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 700;
+    font-size: 1rem;
+  }
+
+  .photo-edit-name {
+    flex: 1;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+
+  .photo-upload-trigger {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1.5px solid var(--line);
+    background: var(--paper-warm);
+    font-size: 1.1rem;
+    cursor: pointer;
   }
 
   .recurrence-type-row {
@@ -765,18 +880,19 @@
 <div class="screen active" id="screen-home">
   <div class="app-header">
     <div class="sync-dot" id="syncDot"></div>
-    <div class="eyebrow">Familia Ortiz Peña</div>
-    <h1>Nuestra agenda</h1>
+    <h1 class="family-title">Familia Ortiz Peña</h1>
   </div>
 
+  <button class="todos-btn active" data-person="todos" onclick="toggleFilter('todos')">Todos</button>
+
   <div class="family-strip" id="familyStrip">
-    <button class="person-circle active" data-person="todos" onclick="toggleFilter('todos')">Todos</button>
-    <button class="person-circle" data-person="cesar" onclick="toggleFilter('cesar')">C</button>
-    <button class="person-circle" data-person="yoli" onclick="toggleFilter('yoli')">Y</button>
-    <button class="person-circle" data-person="gonzalo" onclick="toggleFilter('gonzalo')">G</button>
-    <button class="person-circle" data-person="adrian" onclick="toggleFilter('adrian')">A</button>
-    <button class="person-circle" data-person="familia" onclick="toggleFilter('familia')">👪</button>
+    <button class="person-circle" data-person="cesar" id="circleCesar" onclick="toggleFilter('cesar')"><span class="circle-inner">C</span></button>
+    <button class="person-circle" data-person="yoli" id="circleYoli" onclick="toggleFilter('yoli')"><span class="circle-inner">Y</span></button>
+    <button class="person-circle" data-person="gonzalo" id="circleGonzalo" onclick="toggleFilter('gonzalo')"><span class="circle-inner">G</span></button>
+    <button class="person-circle" data-person="adrian" id="circleAdrian" onclick="toggleFilter('adrian')"><span class="circle-inner">A</span></button>
+    <button class="person-circle" data-person="familia" id="circleFamilia" onclick="toggleFilter('familia')"><span class="circle-inner">👪</span></button>
   </div>
+  <button class="edit-photos-link" onclick="openPhotoEditModal()">✏️ Cambiar fotos</button>
 
   <button class="ics-export-btn" onclick="openIcsExportModal()">📅 Añadir mis eventos al calendario del móvil</button>
   <button class="notif-toggle-btn" id="notifToggleBtn" onclick="enableNotificationsClick()">🔕 Activar avisos en este móvil (extra)</button>
@@ -943,6 +1059,11 @@
 <!-- Modal: ics export -->
 <div class="detail-modal-overlay" id="icsExportModal">
   <div class="detail-modal" id="icsExportContent"></div>
+</div>
+
+<!-- Modal: edit photos -->
+<div class="detail-modal-overlay" id="photoEditModal">
+  <div class="detail-modal" id="photoEditContent"></div>
 </div>
 
 <div class="toast" id="toast"></div>

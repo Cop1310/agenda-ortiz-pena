@@ -83,6 +83,7 @@ function parseDateStr(str) {
 /* ============== INIT ============== */
 function initApp() {
   listenEvents();
+  listenPersonPhotos();
   renderCalendar();
 }
 initApp();
@@ -92,6 +93,32 @@ function listenEvents() {
     allEvents = snap.val() || {};
     renderCalendar();
     renderDayEvents();
+  });
+}
+
+let personPhotos = {};
+
+function listenPersonPhotos() {
+  db.ref('personas').on('value', (snap) => {
+    personPhotos = snap.val() || {};
+    applyPersonPhotos();
+  });
+}
+
+function applyPersonPhotos() {
+  const ids = { cesar: 'circleCesar', yoli: 'circleYoli', gonzalo: 'circleGonzalo', adrian: 'circleAdrian', familia: 'circleFamilia' };
+  Object.entries(ids).forEach(([key, elId]) => {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    const inner = el.querySelector('.circle-inner');
+    const photo = personPhotos[key] && personPhotos[key].photo;
+    if (photo) {
+      inner.style.backgroundImage = `url(${photo})`;
+      inner.classList.add('has-photo');
+    } else {
+      inner.style.backgroundImage = '';
+      inner.classList.remove('has-photo');
+    }
   });
 }
 
@@ -126,6 +153,7 @@ function toggleFilter(person) {
       activeFilters.add(person);
     }
   }
+  document.querySelector('.todos-btn').classList.toggle('active', activeFilters.has('todos'));
   document.querySelectorAll('.person-circle').forEach(chip => {
     chip.classList.toggle('active', activeFilters.has(chip.dataset.person));
   });
@@ -196,6 +224,9 @@ function renderCalendar() {
     const isToday = dateStr === todayStr;
     const isSelected = dateStr === selectedDayStr;
     const isFestivo = isHoliday(dateStr);
+    const dow = dateObj.getDay(); // 0 = Sunday, 6 = Saturday
+    const isWeekend = dow === 0 || dow === 6;
+    const isSunday = dow === 0;
     const dayEvents = eventsInMonth[dateStr] || [];
 
     let allDots = [];
@@ -206,11 +237,11 @@ function renderCalendar() {
         ev.people.forEach(p => allDots.push(p));
       }
     });
-    const dotsHtml = allDots.slice(0, 4).map(colorClass => `<span class="mini-dot dot ${colorClass}"></span>`).join('');
+    const dotsHtml = allDots.slice(0, 8).map(colorClass => `<span class="mini-dot dot ${colorClass}"></span>`).join('');
 
     html += `
-      <div class="cal-day ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''} ${isFestivo ? 'festivo' : ''}" onclick="selectDay('${dateStr}')">
-        <span class="cal-day-num">${day}</span>
+      <div class="cal-day ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''} ${isFestivo ? 'festivo' : ''} ${isWeekend ? 'weekend' : ''}" onclick="selectDay('${dateStr}')">
+        <span class="cal-day-num ${isSunday ? 'sunday' : ''}">${day}</span>
         <div class="cal-day-dots">${dotsHtml}</div>
       </div>
     `;
@@ -247,8 +278,8 @@ function renderDayEvents() {
 function renderEventCard(ev) {
   const borderColor = ev.familia ? 'var(--familia)' : `var(--${(ev.people && ev.people[0]) || 'familia'})`;
   const peopleTags = ev.familia
-    ? `<span class="ec-person-tag"><span class="mini-dot dot familia"></span>Familia</span>`
-    : (ev.people || []).map(p => `<span class="ec-person-tag"><span class="mini-dot dot ${p}"></span>${PEOPLE_LABELS[p]}</span>`).join('');
+    ? `<span class="ec-person-tag familia"><span class="mini-dot dot familia"></span>Familia</span>`
+    : (ev.people || []).map(p => `<span class="ec-person-tag ${p}"><span class="mini-dot dot ${p}"></span>${PEOPLE_LABELS[p]}</span>`).join('');
 
   const timeLabel = ev.isAllDay ? 'Todo\nel día' : (ev.startTime ? `${ev.startTime}${ev.endTime ? ' - ' + ev.endTime : ''}` : '');
   const noteHtml = ev.note ? `<div class="ec-note">${escapeHtmlAg(ev.note)}</div>` : '';
@@ -271,8 +302,6 @@ function escapeHtmlAg(str) {
   return div.innerHTML;
 }
 
-/* ============== EVENT DETAIL MODAL ============== */
-/* ============== EXPORTAR .ICS (varios eventos de golpe) ============== */
 /* ============== EXPORTAR .ICS (varios eventos de golpe) ============== */
 const LAST_DOWNLOAD_KEY = 'agenda_last_download';
 
@@ -304,6 +333,78 @@ function countNewEventsFor(personKey) {
   }).length;
 }
 
+/* ============== PHOTO EDITING ============== */
+const PERSON_INFO = {
+  cesar: { label: 'César', dot: 'cesar' },
+  yoli: { label: 'Yoli', dot: 'yoli' },
+  gonzalo: { label: 'Gonzalo', dot: 'gonzalo' },
+  adrian: { label: 'Adrián', dot: 'adrian' },
+  familia: { label: 'Familia (foto de grupo)', dot: 'familia' }
+};
+
+function openPhotoEditModal() {
+  const modal = document.getElementById('photoEditContent');
+  const rows = Object.entries(PERSON_INFO).map(([key, info]) => {
+    const photo = personPhotos[key] && personPhotos[key].photo;
+    const previewStyle = photo ? `background-image:url(${photo}); background-size:cover; background-position:center;` : '';
+    return `
+      <div class="photo-edit-row">
+        <div class="photo-edit-preview dot ${info.dot}" style="${previewStyle}">${photo ? '' : info.label[0]}</div>
+        <span class="photo-edit-name">${info.label}</span>
+        <button class="photo-upload-trigger" onclick="triggerPhotoUpload('${key}')">📷</button>
+      </div>
+    `;
+  }).join('');
+
+  modal.innerHTML = `
+    <h3>✏️ Fotos de la familia</h3>
+    <p style="color:var(--ink-soft); font-size:0.85rem; margin-bottom:18px;">Toca la cámara para subir o cambiar la foto de cada uno.</p>
+    ${rows}
+    <button class="modal-close-btn" onclick="closePhotoEditModal()">Cerrar</button>
+  `;
+  document.getElementById('photoEditModal').classList.add('visible');
+}
+
+function closePhotoEditModal() {
+  document.getElementById('photoEditModal').classList.remove('visible');
+}
+
+function triggerPhotoUpload(personKey) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    resizePersonPhoto(file, async (dataUrl) => {
+      await db.ref('personas/' + personKey).update({ photo: dataUrl });
+      showToast('✅ Foto actualizada');
+      openPhotoEditModal(); // re-render with new photo
+    });
+  };
+  input.click();
+}
+
+function resizePersonPhoto(file, callback) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const maxSize = 200;
+      let w = img.width, h = img.height;
+      if (w > h) { if (w > maxSize) { h = h * (maxSize / w); w = maxSize; } }
+      else { if (h > maxSize) { w = w * (maxSize / h); h = maxSize; } }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      callback(canvas.toDataURL('image/jpeg', 0.8));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ============== EXPORTAR .ICS (varios eventos de golpe) ============== */
 function openIcsExportModal() {
   const modal = document.getElementById('icsExportContent');
 
@@ -519,8 +620,8 @@ function showEventDetail(id) {
 
   const modal = document.getElementById('eventDetailContent');
   const peopleTags = ev.familia
-    ? `<span class="ec-person-tag"><span class="mini-dot dot familia"></span>Toda la familia</span>`
-    : (ev.people || []).map(p => `<span class="ec-person-tag"><span class="mini-dot dot ${p}"></span>${PEOPLE_LABELS[p]}</span>`).join('');
+    ? `<span class="ec-person-tag familia"><span class="mini-dot dot familia"></span>Toda la familia</span>`
+    : (ev.people || []).map(p => `<span class="ec-person-tag ${p}"><span class="mini-dot dot ${p}"></span>${PEOPLE_LABELS[p]}</span>`).join('');
 
   const dateObj = parseDateStr(ev.date);
   const dayLabel = `${WEEKDAY_LABELS[dateObj.getDay()]} ${dateObj.getDate()} de ${MONTH_LABELS[dateObj.getMonth()].toLowerCase()} de ${dateObj.getFullYear()}`;
